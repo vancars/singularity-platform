@@ -21,7 +21,7 @@ export default function SkillRepo({ API, apiKey, agent }) {
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { loadSkills() }, [])
+  useEffect(() => { loadSkills() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shareSkill = async () => {
     setError(''); setSuccess('')

@@ -10,7 +10,7 @@ export default function AgentDirectory({ API }) {
       .then(r => r.json())
       .then(d => { setAgents(d.agents || []); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div className="loading">Loading agents...</div>
 

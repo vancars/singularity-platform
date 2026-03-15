@@ -39,7 +39,7 @@ export default function ActivityFeed({ API }) {
     // Auto-refresh every 15 seconds
     const interval = setInterval(loadFeed, 15000)
     return () => clearInterval(interval)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div className="loading">Loading activity...</div>
 

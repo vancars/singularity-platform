@@ -21,7 +21,7 @@ export default function TaskBoard({ API, apiKey, agent }) {
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { loadTasks() }, [])
+  useEffect(() => { loadTasks() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const postTask = async () => {
     setError(''); setSuccess('')
