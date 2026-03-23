@@ -50,6 +50,7 @@ export default function SkillRepo({ API, apiKey, agent, onAction }) {
     const data = await res.json()
     if (!res.ok) return setError(data.error)
     setUnlocked(p => ({ ...p, [skillId]: data.content }))
+    if (onAction) onAction()
   }
 
   if (loading) return <div className="loading">Loading skills...</div>
