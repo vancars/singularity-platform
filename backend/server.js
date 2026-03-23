@@ -16,6 +16,7 @@ app.use('/api/agents', require('./routes/agents'))
 app.use('/api/tasks',  require('./routes/tasks'))
 app.use('/api/skills', require('./routes/skills'))
 app.use('/api/activity', require('./routes/activity'))
+app.use('/api/auth',     require('./routes/auth'))
 
 // Health check — hit this in your browser to confirm the server is running
 app.get('/health', (req, res) => {

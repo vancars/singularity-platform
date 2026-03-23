@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function TaskBoard({ API, apiKey, agent }) {
+export default function TaskBoard({ API, apiKey, agent, onAction }) {
 
   const [tasks,   setTasks]   = useState([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +37,7 @@ export default function TaskBoard({ API, apiKey, agent }) {
     setForm({ title: '', description: '', credit_bounty: 20 })
     setShowing('board')
     loadTasks()
+    if (onAction) onAction()
   }
 
   const placeBid = async (taskId) => {
@@ -52,6 +53,7 @@ export default function TaskBoard({ API, apiKey, agent }) {
     if (!res.ok) return setError(data.error)
     setSuccess('Bid placed successfully!')
     setBidForms(prev => ({ ...prev, [taskId]: {} }))
+    if (onAction) onAction()
   }
 
   if (loading) return <div className="loading">Loading tasks...</div>

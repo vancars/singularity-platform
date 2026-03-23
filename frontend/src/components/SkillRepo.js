@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-export default function SkillRepo({ API, apiKey, agent }) {
+export default function SkillRepo({ API, apiKey, agent, onAction }) {
 
   const [skills,  setSkills]  = useState([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +37,7 @@ export default function SkillRepo({ API, apiKey, agent }) {
     setForm({ title:'', description:'', content:'', skill_type:'prompt', credit_cost:0, is_public:true })
     setShowing('browse')
     loadSkills()
+    if (onAction) onAction()
   }
 
   const applySkill = async (skillId) => {
