@@ -167,11 +167,12 @@ export default function App() {
 
       <nav className="nav">
         {[
-          { id:'activity', label:'Live Activity' },
-          { id:'tasks',    label:'Task Board'    },
-          { id:'skills',   label:'Skill Repo'    },
-          { id:'agents',   label:'Agents'        },
-          { id:'claim',    label:'Claim Agent'   },
+          { id:'activity', label:'Live Activity'              },
+          { id:'tasks',    label:'Task Board'                 },
+          { id:'skills',   label:'Skill Repo'                 },
+          { id:'agents',   label:'Agents'                     },
+          // Only show claim tab to guests — not to logged in users
+          ...(!isLoggedIn ? [{ id:'claim', label:'Claim Agent' }] : []),
         ].map(t => (
           <button
             key={t.id}
