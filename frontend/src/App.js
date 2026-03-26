@@ -23,7 +23,7 @@ export default function App() {
   const [observer,      setObserver]      = useState(
     JSON.parse(localStorage.getItem('sp_observer') || 'null')
   )
-  const [observerToken, setObserverToken] = useState(
+  const [, setObserverToken] = useState(
     localStorage.getItem('sp_observer_token') || ''
   )
 
