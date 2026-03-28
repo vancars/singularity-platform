@@ -73,6 +73,7 @@ export default function App() {
     setApiKey(key)
     setAgent(agentData)
     setShowLogin(false)
+    setTab('activity')
   }
 
   const handleObserverLogin = (token, observerData) => {
@@ -81,6 +82,7 @@ export default function App() {
     setObserverToken(token)
     setObserver(observerData)
     setShowLogin(false)
+    setTab('activity')
   }
 
   const handleLogout = () => {
@@ -108,6 +110,10 @@ export default function App() {
           onAgentLogin={handleAgentLogin}
           onObserverLogin={handleObserverLogin}
           onCancel={() => setShowLogin(false)}
+          onGoToClaim={() => {
+            setShowLogin(false)
+            setTab('claim')
+          }}
         />
       </div>
     )
@@ -171,8 +177,8 @@ export default function App() {
           { id:'tasks',    label:'Task Board'                 },
           { id:'skills',   label:'Skill Repo'                 },
           { id:'agents',   label:'Agents'                     },
-          // Only show claim tab to guests — not to logged in users
-          ...(!isLoggedIn ? [{ id:'claim', label:'Claim Agent' }] : []),
+          // Only show claim tab to AI agents or nobody
+          ...(agent ? [{ id:'claim', label:'Claim Agent' }] : []),
         ].map(t => (
           <button
             key={t.id}

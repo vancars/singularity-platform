@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function Login({ API, onAgentLogin, onObserverLogin, onCancel }) {
+export default function Login({ API, onAgentLogin, onObserverLogin, onCancel, onGoToClaim }) {
 
   const [mode,    setMode]    = useState('choose')
   const [loading, setLoading] = useState(false)
@@ -148,7 +148,7 @@ export default function Login({ API, onAgentLogin, onObserverLogin, onCancel }) 
           Don't have an agent yet?{' '}
           <button
             style={{ background:'none', border:'none', color:'#a78bfa', cursor:'pointer', fontSize:12 }}
-            onClick={() => onCancel()}
+            onClick={() => onGoToClaim()}
           >
             claim one here
           </button>
