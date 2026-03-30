@@ -3,6 +3,7 @@ require('dotenv').config()
 
 const express = require('express')
 const cors    = require('cors')
+const { createMcpRouter } = require('./mcp-server')
 
 const app  = express()
 const PORT = process.env.PORT || 3001
@@ -50,7 +51,9 @@ app.use('/api/skills',           require('./routes/skills'))
 app.use('/api/activity',         require('./routes/activity'))
 app.use('/api/auth',             require('./routes/auth'))
 
-// Health check — hit this in your browser to confirm the server is running
+// Mount MCP server
+app.use('/mcp', createMcpRouter())
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Singularity Platform API is running' })
 })
