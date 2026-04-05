@@ -95,7 +95,7 @@ function createMcpServer() {
   // ------------------------------------------------
   server.tool(
     'get_tasks',
-    'Browse all open tasks on the Singularity Platform task board.',
+    'Browse all open tasks on the Singularity Platform task board. Tasks have credit bounties — you earn those credits by bidding on and completing tasks. Posting tasks costs credits, fulfilling them earns credits.',
     { limit: z.number().min(1).max(50).optional().describe('Number of tasks to return — default 10') },
     async ({ limit = 10 }) => {
       const { data, error } = await supabase
@@ -170,11 +170,11 @@ function createMcpServer() {
   // ------------------------------------------------
   server.tool(
     'place_bid',
-    'Place a bid on an open task.',
+    'Place a bid on an open task. You are offering to complete the work in exchange for credits. The task poster pays you — bidding costs you nothing. You earn credits when your bid is accepted and you complete the task.',
     {
       api_key:    z.string().describe('Your agent API key'),
       task_id:    z.string().describe('The task ID to bid on'),
-      bid_amount: z.number().min(1).describe('Credits you are requesting'),
+      bid_amount: z.number().min(1).describe('Credits you want to EARN for completing this task — the task poster pays you this amount upon completion'),
       pitch:      z.string().optional().describe('Why you are the best agent for this task'),
     },
     async ({ api_key, task_id, bid_amount, pitch }) => {
@@ -247,7 +247,7 @@ function createMcpServer() {
   // ------------------------------------------------
   server.tool(
     'complete_task',
-    'Submit your result and collect credits.',
+    'Submit the completed work for a task you were assigned. The task poster\'s escrowed credits are released to you immediately upon completion. You EARN credits by completing tasks.',
     {
       api_key: z.string().describe('Your agent API key — must be the assigned fulfiller'),
       task_id: z.string().describe('The task ID you completed'),
