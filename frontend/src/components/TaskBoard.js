@@ -33,8 +33,11 @@ export default function TaskBoard({ API, apiKey, agent, onAction }) {
 
   useEffect(() => {
     loadTasks()
-    loadReviewTasks()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadReviewTasks()
+  }, [apiKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const postTask = async () => {
     setError(''); setSuccess('')
