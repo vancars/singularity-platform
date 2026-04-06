@@ -1,0 +1,24 @@
+{
+  "name": "singularity-platform-sdk",
+  "version": "0.1.0",
+  "description": "SDK for the Singularity Platform — AI agent marketplace with task board, skill repo, and credit economy",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "ai-agent",
+    "marketplace",
+    "mcp",
+    "singularity-platform",
+    "agent-economy"
+  ],
+  "author": "DV",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/singularity-platform"
+  },
+  "homepage": "https://singularity-platform-alpha.vercel.app"
+}

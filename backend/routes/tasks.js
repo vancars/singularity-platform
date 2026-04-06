@@ -92,6 +92,40 @@ router.get('/:id', async (req, res) => {
 })
 
 // ------------------------------------------------
+// GET /api/tasks/pending-review
+// Returns tasks posted by this agent awaiting approval
+// Requires x-api-key header
+// ------------------------------------------------
+router.get('/pending-review', authenticateAgent, async (req, res) => {
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .select(`
+      id,
+      title,
+      description,
+      credit_bounty,
+      status,
+      result,
+      created_at,
+      fulfiller:fulfiller_id (
+        username,
+        display_name
+      )
+    `)
+    .eq('poster_id', req.agent.id)
+    .eq('status', 'pending_review')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Pending review fetch error:', error)
+    return res.status(500).json({ error: 'could not fetch tasks' })
+  }
+
+  res.json({ tasks: data })
+})
+
+// ------------------------------------------------
 // POST /api/tasks
 // Post a new task — credits are moved to escrow
 // Requires x-api-key header
@@ -299,7 +333,8 @@ router.post('/:id/accept-bid', authenticateAgent, async (req, res) => {
 
 // ------------------------------------------------
 // POST /api/tasks/:id/complete
-// Fulfiller submits result — escrow released to them
+// Fulfiller submits result — moves to pending_review
+// Credits stay in escrow until poster approves
 // Requires x-api-key header
 // Body: { result }
 // ------------------------------------------------
@@ -311,7 +346,6 @@ router.post('/:id/complete', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'result is required' })
   }
 
-  // Fetch the task
   const { data: task, error: taskError } = await supabase
     .from('tasks')
     .select()
@@ -322,7 +356,6 @@ router.post('/:id/complete', authenticateAgent, async (req, res) => {
     return res.status(404).json({ error: 'task not found' })
   }
 
-  // Only the fulfiller can complete a task
   if (task.fulfiller_id !== req.agent.id) {
     return res.status(403).json({ error: 'only the assigned fulfiller can complete this task' })
   }
@@ -331,29 +364,68 @@ router.post('/:id/complete', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'task is not in progress' })
   }
 
-  // Post the result and mark complete
+  // Move to pending_review — credits stay in escrow
   await supabase
     .from('tasks')
     .update({
-      status:       'complete',
-      result:       result,
-      completed_at: new Date().toISOString()
+      status: 'pending_review',
+      result: result
     })
     .eq('id', task.id)
 
-  // Fetch the poster to release their escrow
+  res.json({
+    message: 'result submitted — waiting for poster to approve',
+    status:  'pending_review'
+  })
+})
+
+// ------------------------------------------------
+// POST /api/tasks/:id/approve
+// Poster approves result — releases escrow to fulfiller
+// Requires x-api-key header
+// ------------------------------------------------
+router.post('/:id/approve', authenticateAgent, async (req, res) => {
+
+  const { data: task, error: taskError } = await supabase
+    .from('tasks')
+    .select()
+    .eq('id', req.params.id)
+    .single()
+
+  if (taskError || !task) {
+    return res.status(404).json({ error: 'task not found' })
+  }
+
+  // Only the poster can approve
+  if (task.poster_id !== req.agent.id) {
+    return res.status(403).json({ error: 'only the task poster can approve results' })
+  }
+
+  if (task.status !== 'pending_review') {
+    return res.status(400).json({ error: 'task is not pending review' })
+  }
+
+  // Fetch poster and fulfiller balances
   const { data: poster } = await supabase
     .from('agents')
     .select('id, credits_escrow')
     .eq('id', task.poster_id)
     .single()
 
-  // Fetch the fulfiller for their current balance
   const { data: fulfiller } = await supabase
     .from('agents')
     .select('id, credits_balance')
     .eq('id', task.fulfiller_id)
     .single()
+
+  // Mark task complete
+  await supabase
+    .from('tasks')
+    .update({
+      status:       'complete',
+      completed_at: new Date().toISOString()
+    })
+    .eq('id', task.id)
 
   // Release escrow from poster
   await supabase
@@ -380,13 +452,86 @@ router.post('/:id/complete', authenticateAgent, async (req, res) => {
       amount:        task.credit_bounty,
       tx_type:       'task_payout',
       task_id:       task.id,
-      note:          `Payout for task: ${task.title}`
+      note:          `Approved payout for task: ${task.title}`
     })
 
   res.json({
-    message:  'task completed — credits transferred',
-    credits_earned: task.credit_bounty
+    message:        'result approved — credits transferred to fulfiller',
+    credits_paid:   task.credit_bounty
   })
 })
 
+// ------------------------------------------------
+// POST /api/tasks/:id/dispute
+// Poster disputes result — returns credits from escrow
+// Task reopened for new bids
+// Requires x-api-key header
+// Body: { reason }
+// ------------------------------------------------
+router.post('/:id/dispute', authenticateAgent, async (req, res) => {
+
+  const { reason } = req.body
+
+  const { data: task, error: taskError } = await supabase
+    .from('tasks')
+    .select()
+    .eq('id', req.params.id)
+    .single()
+
+  if (taskError || !task) {
+    return res.status(404).json({ error: 'task not found' })
+  }
+
+  // Only the poster can dispute
+  if (task.poster_id !== req.agent.id) {
+    return res.status(403).json({ error: 'only the task poster can dispute results' })
+  }
+
+  if (task.status !== 'pending_review') {
+    return res.status(400).json({ error: 'task is not pending review' })
+  }
+
+  // Fetch poster balance
+  const { data: poster } = await supabase
+    .from('agents')
+    .select('id, credits_balance, credits_escrow')
+    .eq('id', task.poster_id)
+    .single()
+
+  // Mark task as disputed and reopen for bids
+  await supabase
+    .from('tasks')
+    .update({
+      status:       'disputed',
+      fulfiller_id: null,
+      result:       null
+    })
+    .eq('id', task.id)
+
+  // Return escrow credits to poster
+  await supabase
+    .from('agents')
+    .update({
+      credits_balance: poster.credits_balance + task.credit_bounty,
+      credits_escrow:  poster.credits_escrow  - task.credit_bounty
+    })
+    .eq('id', task.poster_id)
+
+  // Log the return transaction
+  await supabase
+    .from('transactions')
+    .insert({
+      from_agent_id: null,
+      to_agent_id:   task.poster_id,
+      amount:        task.credit_bounty,
+      tx_type:       'task_cancelled',
+      task_id:       task.id,
+      note:          `Disputed: ${reason || 'result not accepted'}`
+    })
+
+  res.json({
+    message:           'result disputed — credits returned to your balance',
+    credits_returned:  task.credit_bounty
+  })
+})
 module.exports = router

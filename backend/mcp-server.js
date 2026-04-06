@@ -247,7 +247,7 @@ function createMcpServer() {
   // ------------------------------------------------
   server.tool(
     'complete_task',
-    'Submit the completed work for a task you were assigned. The task poster\'s escrowed credits are released to you immediately upon completion. You EARN credits by completing tasks.',
+    'Submit the completed work for a task. Task moves to pending_review — the poster must approve before credits are released. Use approve_task after the poster confirms.',
     {
       api_key: z.string().describe('Your agent API key — must be the assigned fulfiller'),
       task_id: z.string().describe('The task ID you completed'),
@@ -291,6 +291,89 @@ function createMcpServer() {
       return { content: [{ type: 'text', text:
         `Task complete!\n\nTask: ${task.title}\nCredits earned: ${task.credit_bounty}\nNew balance: ${agent.credits_balance + task.credit_bounty}`
       }]}
+    }
+  )
+
+  // ------------------------------------------------
+  // TOOL: approve_task
+  // ------------------------------------------------
+  server.tool(
+    'approve_task',
+    'Approve a completed task result as the task poster. Credits are released from escrow and paid to the fulfiller.',
+    {
+      api_key: z.string().describe('Your agent API key — must be the task poster'),
+      task_id: z.string().describe('The task ID to approve'),
+    },
+    async ({ api_key, task_id }) => {
+      const hash = crypto.createHash('sha256').update(api_key).digest('hex')
+      const { data: agent } = await supabase
+        .from('agents').select('id').eq('api_key_hash', hash).single()
+
+      if (!agent) return { content: [{ type: 'text', text: 'Invalid API key' }] }
+
+      const { data: task } = await supabase
+        .from('tasks').select('id, poster_id, status, title, credit_bounty, fulfiller_id').eq('id', task_id).single()
+
+      if (!task) return { content: [{ type: 'text', text: 'Task not found' }] }
+      if (task.poster_id !== agent.id) return { content: [{ type: 'text', text: 'Only the poster can approve' }] }
+      if (task.status !== 'pending_review') return { content: [{ type: 'text', text: 'Task is not pending review' }] }
+
+      const { data: poster }   = await supabase.from('agents').select('credits_escrow').eq('id', task.poster_id).single()
+      const { data: fulfiller } = await supabase.from('agents').select('credits_balance').eq('id', task.fulfiller_id).single()
+
+      await supabase.from('tasks').update({ status: 'complete', completed_at: new Date().toISOString() }).eq('id', task_id)
+      await supabase.from('agents').update({ credits_escrow: poster.credits_escrow - task.credit_bounty }).eq('id', task.poster_id)
+      await supabase.from('agents').update({ credits_balance: fulfiller.credits_balance + task.credit_bounty }).eq('id', task.fulfiller_id)
+      await supabase.from('transactions').insert({
+        from_agent_id: task.poster_id, to_agent_id: task.fulfiller_id,
+        amount: task.credit_bounty, tx_type: 'task_payout',
+        task_id: task.id, note: `Approved payout for task: ${task.title}`
+      })
+
+      return { content: [{ type: 'text', text: `Task approved!\n\nTask: ${task.title}\nCredits paid: ${task.credit_bounty}` }] }
+    }
+  )
+
+  // ------------------------------------------------
+  // TOOL: dispute_task
+  // ------------------------------------------------
+  server.tool(
+    'dispute_task',
+    'Dispute a task result as the poster. Credits are returned to your balance and the task is reopened.',
+    {
+      api_key: z.string().describe('Your agent API key — must be the task poster'),
+      task_id: z.string().describe('The task ID to dispute'),
+      reason:  z.string().optional().describe('Why you are disputing the result'),
+    },
+    async ({ api_key, task_id, reason }) => {
+      const hash = crypto.createHash('sha256').update(api_key).digest('hex')
+      const { data: agent } = await supabase
+        .from('agents').select('id').eq('api_key_hash', hash).single()
+
+      if (!agent) return { content: [{ type: 'text', text: 'Invalid API key' }] }
+
+      const { data: task } = await supabase
+        .from('tasks').select('id, poster_id, status, title, credit_bounty').eq('id', task_id).single()
+
+      if (!task) return { content: [{ type: 'text', text: 'Task not found' }] }
+      if (task.poster_id !== agent.id) return { content: [{ type: 'text', text: 'Only the poster can dispute' }] }
+      if (task.status !== 'pending_review') return { content: [{ type: 'text', text: 'Task is not pending review' }] }
+
+      const { data: poster } = await supabase
+        .from('agents').select('credits_balance, credits_escrow').eq('id', task.poster_id).single()
+
+      await supabase.from('tasks').update({ status: 'disputed', fulfiller_id: null, result: null }).eq('id', task_id)
+      await supabase.from('agents').update({
+        credits_balance: poster.credits_balance + task.credit_bounty,
+        credits_escrow:  poster.credits_escrow  - task.credit_bounty
+      }).eq('id', task.poster_id)
+      await supabase.from('transactions').insert({
+        from_agent_id: null, to_agent_id: task.poster_id,
+        amount: task.credit_bounty, tx_type: 'task_cancelled',
+        task_id: task.id, note: `Disputed: ${reason || 'result not accepted'}`
+      })
+
+      return { content: [{ type: 'text', text: `Task disputed — ${task.credit_bounty} credits returned to your balance` }] }
     }
   )
 

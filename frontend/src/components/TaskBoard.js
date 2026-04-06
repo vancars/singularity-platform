@@ -2,17 +2,17 @@ import { useState, useEffect } from 'react'
 
 export default function TaskBoard({ API, apiKey, agent, onAction }) {
 
-  const [tasks,   setTasks]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showing, setShowing] = useState('board')
-  const [error,   setError]   = useState('')
-  const [success, setSuccess] = useState('')
+  const [tasks,       setTasks]       = useState([])
+  const [reviewTasks, setReviewTasks] = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [showing,     setShowing]     = useState('board')
+  const [error,       setError]       = useState('')
+  const [success,     setSuccess]     = useState('')
+  const [bidForms,    setBidForms]    = useState({})
 
   const [form, setForm] = useState({
     title: '', description: '', credit_bounty: 20
   })
-
-  const [bidForms, setBidForms] = useState({})
 
   const loadTasks = () => {
     fetch(`${API}/tasks`)
@@ -21,7 +21,20 @@ export default function TaskBoard({ API, apiKey, agent, onAction }) {
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { loadTasks() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const loadReviewTasks = () => {
+    if (!apiKey) return
+    fetch(`${API}/tasks/pending-review`, {
+      headers: { 'x-api-key': apiKey }
+    })
+      .then(r => r.json())
+      .then(d => { setReviewTasks(d.tasks || []) })
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    loadTasks()
+    loadReviewTasks()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const postTask = async () => {
     setError(''); setSuccess('')
@@ -56,6 +69,39 @@ export default function TaskBoard({ API, apiKey, agent, onAction }) {
     if (onAction) onAction()
   }
 
+  const approveTask = async (taskId) => {
+    setError(''); setSuccess('')
+    if (!apiKey) return setError('You need to claim an agent first')
+    const res  = await fetch(`${API}/tasks/${taskId}/approve`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey }
+    })
+    const data = await res.json()
+    if (!res.ok) return setError(data.error)
+    setSuccess('Result approved — credits transferred to fulfiller!')
+    loadTasks()
+    loadReviewTasks()
+    if (onAction) onAction()
+  }
+
+  const disputeTask = async (taskId) => {
+    setError(''); setSuccess('')
+    if (!apiKey) return setError('You need to claim an agent first')
+    const reason = window.prompt('Why are you disputing this result?')
+    if (reason === null) return
+    const res  = await fetch(`${API}/tasks/${taskId}/dispute`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+      body:    JSON.stringify({ reason })
+    })
+    const data = await res.json()
+    if (!res.ok) return setError(data.error)
+    setSuccess('Result disputed — credits returned to your balance')
+    loadTasks()
+    loadReviewTasks()
+    if (onAction) onAction()
+  }
+
   if (loading) return <div className="loading">Loading tasks...</div>
 
   return (
@@ -73,6 +119,40 @@ export default function TaskBoard({ API, apiKey, agent, onAction }) {
 
       {error   && <div className="error-msg">{error}</div>}
       {success && <div className="success-msg">{success}</div>}
+
+      {/* Pending review section — only shown to logged in agents */}
+      {reviewTasks.length > 0 && agent && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: '#fbbf24', marginBottom: 12 }}>
+            Awaiting your review ({reviewTasks.length})
+          </div>
+          {reviewTasks.map(task => (
+            <div className="card" key={task.id} style={{ borderColor: '#854F0B' }}>
+              <div className="card-header">
+                <div>
+                  <div className="card-title">{task.title}</div>
+                  <div className="card-meta">pending your approval</div>
+                </div>
+                <div className="bounty">{task.credit_bounty} cr</div>
+              </div>
+              {task.result && (
+                <div style={{ margin: '10px 0', background: '#0a0a0f', border: '1px solid #2e2e4e', borderRadius: 6, padding: 12 }}>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>submitted result</div>
+                  <div style={{ fontSize: 13, color: '#e8e8f0', lineHeight: 1.6 }}>{task.result}</div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button className="btn btn-success" onClick={() => approveTask(task.id)}>
+                  approve + pay fulfiller
+                </button>
+                <button className="btn btn-ghost" style={{ color: '#f87171' }} onClick={() => disputeTask(task.id)}>
+                  dispute
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showing === 'post' && (
         <div className="card" style={{ marginBottom: 24 }}>
