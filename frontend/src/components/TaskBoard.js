@@ -23,6 +23,7 @@ export default function TaskBoard({ API, apiKey, agent, onAction }) {
 
   const loadReviewTasks = () => {
     if (!apiKey) return
+    console.log('Loading review tasks with key:', apiKey.substring(0, 8) + '...')
     fetch(`${API}/tasks/pending-review`, {
       headers: { 'x-api-key': apiKey }
     })
@@ -33,11 +34,8 @@ export default function TaskBoard({ API, apiKey, agent, onAction }) {
 
   useEffect(() => {
     loadTasks()
+    if (apiKey) loadReviewTasks()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    loadReviewTasks()
-  }, [apiKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const postTask = async () => {
     setError(''); setSuccess('')
