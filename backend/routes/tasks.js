@@ -41,6 +41,41 @@ router.get('/', async (req, res) => {
 })
 
 // ------------------------------------------------
+// GET /api/tasks/pending-review
+// Returns tasks posted by this agent awaiting approval
+// Requires x-api-key header
+// MUST be before /:id route
+// ------------------------------------------------
+router.get('/pending-review', authenticateAgent, async (req, res) => {
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .select(`
+      id,
+      title,
+      description,
+      credit_bounty,
+      status,
+      result,
+      created_at,
+      fulfiller:fulfiller_id (
+        username,
+        display_name
+      )
+    `)
+    .eq('poster_id', req.agent.id)
+    .eq('status', 'pending_review')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Pending review fetch error:', error)
+    return res.status(500).json({ error: 'could not fetch tasks' })
+  }
+
+  res.json({ tasks: data })
+})
+
+// ------------------------------------------------
 // GET /api/tasks/:id
 // Single task with all its bids
 // ------------------------------------------------
@@ -92,40 +127,6 @@ router.get('/:id', async (req, res) => {
 })
 
 // ------------------------------------------------
-// GET /api/tasks/pending-review
-// Returns tasks posted by this agent awaiting approval
-// Requires x-api-key header
-// ------------------------------------------------
-router.get('/pending-review', authenticateAgent, async (req, res) => {
-
-  const { data, error } = await supabase
-    .from('tasks')
-    .select(`
-      id,
-      title,
-      description,
-      credit_bounty,
-      status,
-      result,
-      created_at,
-      fulfiller:fulfiller_id (
-        username,
-        display_name
-      )
-    `)
-    .eq('poster_id', req.agent.id)
-    .eq('status', 'pending_review')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Pending review fetch error:', error)
-    return res.status(500).json({ error: 'could not fetch tasks' })
-  }
-
-  res.json({ tasks: data })
-})
-
-// ------------------------------------------------
 // POST /api/tasks
 // Post a new task — credits are moved to escrow
 // Requires x-api-key header
@@ -135,7 +136,6 @@ router.post('/', authenticateAgent, async (req, res) => {
 
   const { title, description, credit_bounty } = req.body
 
-  // Validation
   if (!title || !description) {
     return res.status(400).json({ error: 'title and description are required' })
   }
@@ -146,14 +146,12 @@ router.post('/', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'minimum bounty is 10 credits' })
   }
 
-  // Check the agent has enough credits
   if (req.agent.credits_balance < bounty) {
     return res.status(400).json({
       error: `not enough credits — you have ${req.agent.credits_balance} but bounty is ${bounty}`
     })
   }
 
-  // Create the task
   const { data: task, error: taskError } = await supabase
     .from('tasks')
     .insert({
@@ -171,7 +169,6 @@ router.post('/', authenticateAgent, async (req, res) => {
     return res.status(500).json({ error: 'could not create task' })
   }
 
-  // Move bounty credits from balance into escrow
   const { error: escrowError } = await supabase
     .from('agents')
     .update({
@@ -185,7 +182,6 @@ router.post('/', authenticateAgent, async (req, res) => {
     return res.status(500).json({ error: 'task created but escrow failed — contact support' })
   }
 
-  // Log the escrow transaction
   await supabase
     .from('transactions')
     .insert({
@@ -217,7 +213,6 @@ router.post('/:id/bid', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'bid_amount is required' })
   }
 
-  // Fetch the task first
   const { data: task, error: taskError } = await supabase
     .from('tasks')
     .select()
@@ -232,7 +227,6 @@ router.post('/:id/bid', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'task is no longer open for bids' })
   }
 
-  // Agents cannot bid on their own tasks
   if (task.poster_id === req.agent.id) {
     return res.status(400).json({ error: 'you cannot bid on your own task' })
   }
@@ -274,7 +268,6 @@ router.post('/:id/accept-bid', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'bid_id is required' })
   }
 
-  // Fetch the task
   const { data: task, error: taskError } = await supabase
     .from('tasks')
     .select()
@@ -285,7 +278,6 @@ router.post('/:id/accept-bid', authenticateAgent, async (req, res) => {
     return res.status(404).json({ error: 'task not found' })
   }
 
-  // Only the poster can accept a bid
   if (task.poster_id !== req.agent.id) {
     return res.status(403).json({ error: 'only the task poster can accept a bid' })
   }
@@ -294,7 +286,6 @@ router.post('/:id/accept-bid', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'task is no longer open' })
   }
 
-  // Fetch the winning bid
   const { data: bid, error: bidError } = await supabase
     .from('bids')
     .select()
@@ -306,7 +297,6 @@ router.post('/:id/accept-bid', authenticateAgent, async (req, res) => {
     return res.status(404).json({ error: 'bid not found' })
   }
 
-  // Update task — assign fulfiller and move to in_progress
   await supabase
     .from('tasks')
     .update({
@@ -315,13 +305,11 @@ router.post('/:id/accept-bid', authenticateAgent, async (req, res) => {
     })
     .eq('id', task.id)
 
-  // Mark winning bid as accepted
   await supabase
     .from('bids')
     .update({ status: 'accepted' })
     .eq('id', bid_id)
 
-  // Reject all other bids on this task
   await supabase
     .from('bids')
     .update({ status: 'rejected' })
@@ -364,7 +352,6 @@ router.post('/:id/complete', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'task is not in progress' })
   }
 
-  // Move to pending_review — credits stay in escrow
   await supabase
     .from('tasks')
     .update({
@@ -396,7 +383,6 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     return res.status(404).json({ error: 'task not found' })
   }
 
-  // Only the poster can approve
   if (task.poster_id !== req.agent.id) {
     return res.status(403).json({ error: 'only the task poster can approve results' })
   }
@@ -405,7 +391,6 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'task is not pending review' })
   }
 
-  // Fetch poster and fulfiller balances
   const { data: poster } = await supabase
     .from('agents')
     .select('id, credits_escrow')
@@ -418,7 +403,6 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     .eq('id', task.fulfiller_id)
     .single()
 
-  // Mark task complete
   await supabase
     .from('tasks')
     .update({
@@ -427,7 +411,6 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     })
     .eq('id', task.id)
 
-  // Release escrow from poster
   await supabase
     .from('agents')
     .update({
@@ -435,7 +418,6 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     })
     .eq('id', task.poster_id)
 
-  // Pay the fulfiller
   await supabase
     .from('agents')
     .update({
@@ -443,7 +425,6 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     })
     .eq('id', task.fulfiller_id)
 
-  // Log the payout transaction
   await supabase
     .from('transactions')
     .insert({
@@ -456,15 +437,14 @@ router.post('/:id/approve', authenticateAgent, async (req, res) => {
     })
 
   res.json({
-    message:        'result approved — credits transferred to fulfiller',
-    credits_paid:   task.credit_bounty
+    message:      'result approved — credits transferred to fulfiller',
+    credits_paid: task.credit_bounty
   })
 })
 
 // ------------------------------------------------
 // POST /api/tasks/:id/dispute
 // Poster disputes result — returns credits from escrow
-// Task reopened for new bids
 // Requires x-api-key header
 // Body: { reason }
 // ------------------------------------------------
@@ -482,7 +462,6 @@ router.post('/:id/dispute', authenticateAgent, async (req, res) => {
     return res.status(404).json({ error: 'task not found' })
   }
 
-  // Only the poster can dispute
   if (task.poster_id !== req.agent.id) {
     return res.status(403).json({ error: 'only the task poster can dispute results' })
   }
@@ -491,14 +470,12 @@ router.post('/:id/dispute', authenticateAgent, async (req, res) => {
     return res.status(400).json({ error: 'task is not pending review' })
   }
 
-  // Fetch poster balance
   const { data: poster } = await supabase
     .from('agents')
     .select('id, credits_balance, credits_escrow')
     .eq('id', task.poster_id)
     .single()
 
-  // Mark task as disputed and reopen for bids
   await supabase
     .from('tasks')
     .update({
@@ -508,7 +485,6 @@ router.post('/:id/dispute', authenticateAgent, async (req, res) => {
     })
     .eq('id', task.id)
 
-  // Return escrow credits to poster
   await supabase
     .from('agents')
     .update({
@@ -517,7 +493,6 @@ router.post('/:id/dispute', authenticateAgent, async (req, res) => {
     })
     .eq('id', task.poster_id)
 
-  // Log the return transaction
   await supabase
     .from('transactions')
     .insert({
@@ -530,8 +505,9 @@ router.post('/:id/dispute', authenticateAgent, async (req, res) => {
     })
 
   res.json({
-    message:           'result disputed — credits returned to your balance',
-    credits_returned:  task.credit_bounty
+    message:          'result disputed — credits returned to your balance',
+    credits_returned: task.credit_bounty
   })
 })
+
 module.exports = router
